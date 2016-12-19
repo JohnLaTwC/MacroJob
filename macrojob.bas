@@ -40,7 +40,7 @@ Private Type JOBOBJECT_BASIC_LIMIT_INFORMATION
     PerJobUserTimeLimit As LARGE_INTEGER
     LimitFlags As Long
     MinimumWorkingSetSize As Long
-    MaximumWorkingSetSize As Long
+   MaximumWorkingSetSize As Long
     ActiveProcessLimit As Long
     ByteArray(15) As Byte
 End Type
@@ -72,8 +72,7 @@ Sub AddProcessToJob()
     Const JOB_OBJECT_LIMIT_ACTIVE_PROCESS = &H8
     Dim fRetVal
     
-    If g_fAddedToJob Then
-        Exit Sub
+    If g_fAddedToJob Then Exit Sub
         
     'Define restrictions
     ' JOB_OBJECT_LIMIT_ACTIVE_PROCESS prevents the app from spawning child processes
