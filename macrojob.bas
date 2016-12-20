@@ -19,15 +19,13 @@
 '       https://www.microsoft.com/msj/0399/jobkernelobj/jobkernelobj.aspx
 '
 ' Job objects allow you to place many different restrictions on processes.
-' This poc tests to see if Word is opening a file in the temp folder outside of the protected view,
-' and if so, it places the Word process in a job that prevents it from creating child processes using
-' the JOB_OBJECT_LIMIT_ACTIVE_PROCESS option.
+' This poc uses the JOB_OBJECT_LIMIT_ACTIVE_PROCESS option to limit child processes.
 '
 ' You can learn more about job objects here:
 ' https://msdn.microsoft.com/en-us/library/windows/desktop/ms684161(v=vs.85).aspx
 '
-' Channel your inner @tiraniddo to learn about Windows security primitives and then
-' then figure out how to bypass them
+' Channel your inner @tiraniddo to learn about Windows security primitives and 
+' figure out how to bypass them, then develop a countermeasure :)
 '
 '
 ' INSTALL: 
