@@ -29,24 +29,37 @@
 ' Channel your inner @tiraniddo to learn about Windows security primitives and then
 ' then figure out how to bypass them
 '
+'
+' INSTALL: 
+'   1. Launch Word, New Blank Document
+'   2. From the View ribbon tab, click Macros (Alt + F8)
+'   3. Select Normal.dotm (global template) from 'Macros in:' combobox
+'   4. Type 'test' as the macro name and click Create. This will bring up the VBA editor
+'   5. Paste in these macros. 
+'   6. Save and exit Word
+
 Option Explicit
-Private Type LARGE_INTEGER
+Type LARGE_INTEGER
     lowPart As Long
     highPart As Long
 End Type
 
-Private Type JOBOBJECT_BASIC_LIMIT_INFORMATION
+Type JOBOBJECT_BASIC_LIMIT_INFORMATION
     PerProcessUserTimeLimit As LARGE_INTEGER
     PerJobUserTimeLimit As LARGE_INTEGER
     LimitFlags As Long
     MinimumWorkingSetSize As Long
-   MaximumWorkingSetSize As Long
+    MaximumWorkingSetSize As Long
     ActiveProcessLimit As Long
     ByteArray(15) As Byte
 End Type
 Declare Function CreateJobObjectA Lib "kernel32" (ByVal lpJobAttributes As Long, ByVal lpName As String) As Long
+Declare Function OpenJobObjectA Lib "kernel32" (ByVal dwDesiredAccess As Long, ByVal bInheritHandles As Long, ByVal lpName As String) As Long
 
 Declare Function SetInformationJobObject Lib "kernel32" (ByVal hJob As Long, ByVal JobObjectInfoClass As Long, ByRef lpJobObjectInfo As JOBOBJECT_BASIC_LIMIT_INFORMATION, ByVal cbJobObjectInfoLength As Long) As Boolean
+
+Declare Function QueryInformationJobObject Lib "kernel32" (ByVal hJob As Long, ByVal JobObjectInfoClass As Long, ByRef lpJobObjectInfo As JOBOBJECT_BASIC_LIMIT_INFORMATION, ByVal cbJobObjectInfoLength As Long, ByRef cbLength As Long) As Boolean
+
 
 Declare Function AssignProcessToJobObject Lib "kernel32" (ByVal hJob As Long, ByVal hProcess As Long) As Boolean
 
@@ -60,47 +73,59 @@ Declare Function FlashWindow Lib "user32" (ByVal hwnd As Long, ByVal bInvert As 
 
 Declare Function GetForegroundWindow Lib "user32" () As Long
 
-Dim g_fAddedToJob
 Declare Function GetCommandLineA Lib "kernel32" () As Long
+
 Declare Function lstrcpynA Lib "kernel32" (ByVal pDestination As String, ByVal pSource As Long, ByVal iMaxLength As Integer) As Long
+Const JOB_OBJECT_QUERY = &H4
 Dim g_szCmdLine
 Dim g_fHookOnClose
+Dim g_hJob As Long
 Sub AddProcessToJob()
     Dim dwLastErr
     Dim hJob
     Const JobObjectBasicLimitInformation = 2
     Const JOB_OBJECT_LIMIT_ACTIVE_PROCESS = &H8
-    Dim fRetVal
     
-    If g_fAddedToJob Then Exit Sub
-        
     'Define restrictions
     ' JOB_OBJECT_LIMIT_ACTIVE_PROCESS prevents the app from spawning child processes
     Dim limitInfo As JOBOBJECT_BASIC_LIMIT_INFORMATION
-    limitInfo.LimitFlags = JOB_OBJECT_LIMIT_ACTIVE_PROCESS
-    limitInfo.ActiveProcessLimit = 1    ' Set to 1 means no child processes
     
-    'Create the job object
-    hJob = CreateJobObjectA(0, "MacroJob_" & GetCurrentProcessId)
-    
+    Dim szJobName
+    szJobName = "MacroJob_" & GetCurrentProcessId
+
+    hJob = OpenJobObjectA(JOB_OBJECT_QUERY, 0, szJobName)
     If hJob <> 0 Then
-        'Apply the restrictions
-        If SetInformationJobObject(hJob, JobObjectBasicLimitInformation, limitInfo, Len(limitInfo)) <> 0 Then
-        
-            'Add the current process (-1) to the Job
-            If AssignProcessToJobObject(hJob, -1) <> 0 Then
-                'Flash window to indicate success
-                FlashWindow GetForegroundWindow(), 1
-                g_fAddedToJob = True
-            Else
-                dwLastErr = GetLastError()
-                MsgBox ("Error calling AssignProcessToJobObject= " & dwLastErr)
-            End If
-        Else
-            dwLastErr = GetLastError()
-            MsgBox ("Error calling SetInformationJobObject= " & dwLastErr)
+        Dim cbLen
+        If QueryInformationJobObject(hJob, JobObjectBasicLimitInformation, limitInfo, Len(limitInfo), cbLen) <> 0 Then
+            Debug.Print "ActiveProcessLimit=" & CStr(limitInfo.ActiveProcessLimit)
         End If
         CloseHandle (hJob)
+    Else
+        limitInfo.LimitFlags = JOB_OBJECT_LIMIT_ACTIVE_PROCESS
+        limitInfo.ActiveProcessLimit = 1    ' Set to 1 means no child processes
+        
+        'Create the job object
+        hJob = CreateJobObjectA(0, szJobName)
+        
+        If hJob <> 0 Then
+            'Apply the restrictions
+            If SetInformationJobObject(hJob, JobObjectBasicLimitInformation, limitInfo, Len(limitInfo)) <> 0 Then
+            
+                'Add the current process (-1) to the Job
+                If AssignProcessToJobObject(hJob, -1) <> 0 Then
+                    'Flash window to indicate success
+                    FlashWindow GetForegroundWindow(), 1
+                    Debug.Print "Added to job: " & szJobName
+                Else
+                    dwLastErr = GetLastError()
+                    MsgBox ("Error calling AssignProcessToJobObject= " & dwLastErr)
+                End If
+            Else
+                dwLastErr = GetLastError()
+                MsgBox ("Error calling SetInformationJobObject= " & dwLastErr)
+            End If
+            g_hJob = hJob
+        End If
     End If
 End Sub
 
@@ -128,7 +153,6 @@ Sub AutoExec()
         AutoExecImpl
     End If
 End Sub
-
 Sub AutoClose()
     If g_fHookOnClose Then
         AutoExecImpl
@@ -159,10 +183,5 @@ Function HasMOTW()
     End If
 End Function
 Sub AutoExecImpl()
-    ' If the file was downloaded to a temp folder...
-    If InStr(1, GetCommandLine(), "\Content.Outlook\", vbTextCompare) > 1 Or _
-       InStr(1, GetCommandLine(), "\Temp\", vbTextCompare) > 1 Or _
-       InStr(1, GetCommandLine(), "\Downloads\", vbTextCompare) > 1 Then
-        AddProcessToJob
-    End If
+    AddProcessToJob
 End Sub
